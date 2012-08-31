@@ -5,6 +5,7 @@ Put out a summary of Mongo doc structure
 import json
 import pymongo
 from bson import json_util
+import re
 import sys
 import argparse
 
@@ -54,8 +55,13 @@ def dot_clean_label(s):
     return s.replace(" ","_").replace("(","_").replace(")","_")
 
 def _dot(obj, parent, depth, param):
+    if depth >= param['max_depth']:
+        return
     if isinstance(obj, dict):
         for k,v in obj.iteritems():
+            # skip dict/lists like { '1':'foo', '2':'bar', ... }
+            if not param['dict_lists'] and re.match(r'\d+', k) and k != '1':
+                continue 
             name = parent + "_" + dot_clean_label(k)
             label = k[:20] if param['show_key'] else "L{0:d}".format(depth)
             yield dot_join("{0} [label=\"{1}\"]".format(name, label),
@@ -101,6 +107,8 @@ def _html(obj, depth, param):
     elif isinstance(obj, dict):
         yield "<ul>"
         for k in sorted(obj.keys()):
+            if not param['dict_lists'] and re.match(r'\d+', k) and k != '1':
+                continue 
             v = obj[k]
             yield "<li>{key}".format(key=k)
             for text in _html(v, depth+1, param):
@@ -150,6 +158,9 @@ def main():
                         help="Input MongoDB, host:port:user:pass:db:coll")
     parser.add_argument("--lists", dest="show_lists", action="store_true",
                         help="Show all list elements (default: first one)")
+    parser.add_argument("--dict-lists", dest="show_dict_lists", action="store_true",
+                        help="Show list elements from dicts with strictly "
+                        "numeric keys (default: first one)")                    
     parser.add_argument("--depth", dest="maxdepth", type=int, default=99999,
                         help="Max. depth to show (default: all)")                
     parser.add_argument("--dot-labels", action="store_true", dest="is_full",
@@ -184,10 +195,12 @@ def main():
     ofile = sys.stdout
     if mode == 'dot':
         dot_print(ofile, data, show_key=args.is_full, aspect_ratio=args.ar,
-                  shape=args.shp, show_lists=args.show_lists, 
+                  shape=args.shp, show_lists=args.show_lists,
+                  dict_lists=args.show_dict_lists,
                   max_depth=args.maxdepth)
     elif mode == 'html':
         html_print(ofile, data, show_lists=args.show_lists,
+                   dict_lists=args.show_dict_lists,
                    max_depth=args.maxdepth)
     else:
         parser.error("Bad mode {}".format(mode))
